@@ -13,6 +13,33 @@
     <description>module aggregator</description>
     <url>http://pitest.org</url>
 
+    <scm>
+        <url>https://github.com/sarahBuisson/maven-universal-module-aggregator-plugin</url>
+        <connection>scm:git:git://github.com/sarahBuisson/maven-universal-module-aggregator-plugin</connection>
+    </scm>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+    <developers>
+        <developer>
+            <id>sbuisson</id>
+            <name>Sarah Buisson</name>
+            <email>sarahbuisson@users.noreply.github.com</email>
+        </developer>
+    </developers>
+
+    <issueManagement>
+        <url>https://github.com/sarahBuisson/maven-universal-module-aggregator-plugin</url>
+        <system>GitHub</system>
+    </issueManagement>
+
+
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
