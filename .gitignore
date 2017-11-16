@@ -1,0 +1,6 @@
+*.iml
+.idea/
+target/**
+# Created by .ignore support plugin (hsz.mobi)
+pitest-xebicon-demo/
+pitest-xebicon-demo2/
