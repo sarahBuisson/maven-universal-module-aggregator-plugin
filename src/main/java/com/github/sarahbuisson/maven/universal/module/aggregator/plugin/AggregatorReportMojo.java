@@ -15,8 +15,8 @@
 package com.github.sarahbuisson.maven.universal.module.aggregator.plugin;
 
 import com.google.common.io.Files;
-import com.google.common.io.Resources;
 import org.antlr.stringtemplate.StringTemplate;
+import org.antlr.stringtemplate.StringTemplateGroup;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.apache.maven.doxia.siterenderer.Renderer;
@@ -30,7 +30,6 @@ import org.apache.maven.reporting.AbstractMavenReport;
 import org.apache.maven.reporting.MavenReportException;
 
 import java.io.*;
-import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.*;
 
@@ -79,7 +78,7 @@ public class AggregatorReportMojo extends AbstractMavenReport {
     /**
      * path to the template (.st format) of files who resume all the modules. optional
      * example:
-     * <aggregateTemplates>index.html.st</aggregateTemplates>
+     * <aggregateTemplates>index.st</aggregateTemplates>
      */
     @Parameter(property = "aggregateTemplates")
     private File[] aggregateTemplate;
@@ -182,8 +181,12 @@ public class AggregatorReportMojo extends AbstractMavenReport {
             }
         }
 
+        if(aggregateTemplate ==null || aggregateTemplate.length==0) {
+            createDefaultAggregatorFiles(datasByModules);
+        }else {
+            createCustomAggregatorFiles(datasByModules);
+        }
 
-        createAggregatorFile(datasByModules);
         this.getLog().debug("Aggregator - ending");
     }
 
@@ -194,7 +197,34 @@ public class AggregatorReportMojo extends AbstractMavenReport {
     }
 
 
-    private void createAggregatorFile(Map<String, MavenProject> indexByModules) {
+    private void createDefaultAggregatorFiles(Map<String, MavenProject> indexByModules) {
+
+        StringTemplateGroup group = new StringTemplateGroup("aggregator");
+
+
+        try {
+            final Writer writerIndex;
+            writerIndex = createWriterForFile(this.getOutputDirectory() + File.separator + "index.html");
+            final StringTemplate stIndex = group
+                    .getInstanceOf("maven-universal-module-aggregator-plugin/templates/index");
+            writerIndex.write(computeStringTemplate(stIndex, indexByModules));
+            writerIndex.close();
+
+
+            final Writer writerCss;
+            writerCss = createWriterForFile(this.getOutputDirectory() + File.separator + "style.css");
+            final StringTemplate stCss = group
+                    .getInstanceOf("maven-universal-module-aggregator-plugin/templates/style");
+            writerCss.write(computeStringTemplate(stCss, indexByModules));
+            writerCss.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private void createCustomAggregatorFiles(Map<String, MavenProject> indexByModules) {
         for (File template : aggregateTemplate) {
 
             try {
@@ -222,17 +252,17 @@ public class AggregatorReportMojo extends AbstractMavenReport {
 
     }
 
-    public Writer createWriterForFile(final String file) throws IOException {
+    public Writer createWriterForFile(final String filePath) throws IOException {
 
-        final int fileSepIndex = file.lastIndexOf(File.separatorChar);
+        final int fileSepIndex = filePath.lastIndexOf(File.separatorChar);
         if (fileSepIndex > 0) {
 
-            final File directoryFile = new File(file).getParentFile();
+            final File directoryFile = new File(filePath).getParentFile();
             if (!directoryFile.exists()) {
                 directoryFile.mkdirs();
             }
         }
-        return new BufferedWriter(new FileWriter(file));
+        return new BufferedWriter(new FileWriter(filePath));
 
     }
 
