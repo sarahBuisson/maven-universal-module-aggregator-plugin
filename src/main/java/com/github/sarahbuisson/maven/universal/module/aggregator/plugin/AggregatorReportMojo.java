@@ -1,22 +1,6 @@
-/*
- * Copyright 2015 Jason Fehr
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
 package com.github.sarahbuisson.maven.universal.module.aggregator.plugin;
 
-import com.google.common.io.Files;
-import org.antlr.stringtemplate.StringTemplate;
-import org.antlr.stringtemplate.StringTemplateGroup;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.apache.maven.doxia.siterenderer.Renderer;
@@ -29,9 +13,13 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.reporting.AbstractMavenReport;
 import org.apache.maven.reporting.MavenReportException;
 
-import java.io.*;
-import java.nio.charset.Charset;
-import java.util.*;
+import java.io.File;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Merge the report of the pit mutation testing from the module to the parent.
@@ -74,14 +62,21 @@ public class AggregatorReportMojo extends AbstractMavenReport {
     @Parameter(property = "copyModules", defaultValue = "true")
     protected boolean copyModules;
 
+    /**
+     * use default template to resume all the modules. default = true
+     */
+    @Parameter(property = "useDefaultTemplate", defaultValue = "true")
+    protected boolean useDefaultTemplate;
+
 
     /**
      * path to the template (.st format) of files who resume all the modules. optional
      * example:
-     * <aggregateTemplates>index.st</aggregateTemplates>
+     * <aggregateTemplatesPath>src/main/resources/report/index_html.st</aggregateTemplates>
+     * <aggregateTemplatesPath>src/main/resources/report2</aggregateTemplates>
      */
-    @Parameter(property = "aggregateTemplates")
-    private File[] aggregateTemplate;
+    @Parameter(property = "aggregateTemplatesPath")
+    private String aggregateTemplatesPath;
 
 
     @Parameter(defaultValue = "${project}", required = true, readonly = true)
@@ -91,10 +86,8 @@ public class AggregatorReportMojo extends AbstractMavenReport {
     @Parameter(defaultValue = "${session}", readonly = true)
     protected MavenSession mavenSession;
 
+    private AggregateGenerator generator = new AggregateGenerator();
 
-    public AggregatorReportMojo() {
-        super();
-    }
 
     @Override
     protected Renderer getSiteRenderer() {
@@ -143,14 +136,11 @@ public class AggregatorReportMojo extends AbstractMavenReport {
             this.getLog().debug(project + "not a pom project: ignore");
             return;
         }
-        for (File f : aggregateTemplate)
-            if (f.isDirectory()) {
-                List<File> templates = new ArrayList<File>();
-                templates.addAll(Arrays.asList(aggregateTemplate));
-                templates.remove(f);
-                templates.addAll(Arrays.asList(f.listFiles()));
-                aggregateTemplate =templates.toArray(new File[]{});
-            }
+        if (project.getModules().isEmpty()) {
+            this.getLog().debug(project + "no modules: ignore");
+            return;
+        }
+
         File reportsDirectory = new File(getOutputDirectory());
 
         Map<String, MavenProject> datasByModules = new HashMap<String, MavenProject>();
@@ -160,17 +150,18 @@ public class AggregatorReportMojo extends AbstractMavenReport {
                 if (copyModules) {
 
                     File moduleDirectoryInTheParentTarget = new File(reportsDirectory.getAbsoluteFile(), module.getArtifactId());
-
-                    moduleDirectoryInTheParentTarget.mkdir();
-
+                    if (!moduleDirectoryInTheParentTarget.exists()) {
+                        moduleDirectoryInTheParentTarget.mkdir();
+                    }
 
                     try {
                         File[] filesToCopy = new File(module.getBuild().getDirectory()).listFiles((FilenameFilter) new RegexFileFilter(this.filesToAggregateModulePath));
-                        for (File fileToCopy : filesToCopy) {
-                            this.getLog().debug("copy - starting:" + fileToCopy);
-                            this.getLog().debug("copy - in :" + moduleDirectoryInTheParentTarget);
-                            FileUtils.copyDirectory(fileToCopy, moduleDirectoryInTheParentTarget);
-                        }
+                        this.getLog().debug("copy - in :" + moduleDirectoryInTheParentTarget);
+                        if (filesToCopy != null)
+                            for (File fileToCopy : filesToCopy) {
+                                this.getLog().debug("copy file:" + fileToCopy);
+                                FileUtils.copyDirectory(fileToCopy, moduleDirectoryInTheParentTarget);
+                            }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -181,10 +172,16 @@ public class AggregatorReportMojo extends AbstractMavenReport {
             }
         }
 
-        if(aggregateTemplate ==null || aggregateTemplate.length==0) {
-            createDefaultAggregatorFiles(datasByModules);
-        }else {
-            createCustomAggregatorFiles(datasByModules);
+        Map<String, Object> attributes = new HashedMap();
+        attributes.put("datasByModules", datasByModules);
+        attributes.put("mojo", this);
+        attributes.put("modules", datasByModules.values());
+
+        if (aggregateTemplatesPath != null) {
+            generator.createCustomAggregatorFiles(aggregateTemplatesPath, this.getOutputDirectory(), attributes);
+        }
+        if (useDefaultTemplate) {
+            generator.createDefaultAggregatorFiles(this.getOutputDirectory(), attributes);
         }
 
         this.getLog().debug("Aggregator - ending");
@@ -196,74 +193,5 @@ public class AggregatorReportMojo extends AbstractMavenReport {
         return true;
     }
 
-
-    private void createDefaultAggregatorFiles(Map<String, MavenProject> indexByModules) {
-
-        StringTemplateGroup group = new StringTemplateGroup("aggregator");
-
-
-        try {
-            final Writer writerIndex;
-            writerIndex = createWriterForFile(this.getOutputDirectory() + File.separator + "index.html");
-            final StringTemplate stIndex = group
-                    .getInstanceOf("maven-universal-module-aggregator-plugin/templates/index");
-            writerIndex.write(computeStringTemplate(stIndex, indexByModules));
-            writerIndex.close();
-
-
-            final Writer writerCss;
-            writerCss = createWriterForFile(this.getOutputDirectory() + File.separator + "style.css");
-            final StringTemplate stCss = group
-                    .getInstanceOf("maven-universal-module-aggregator-plugin/templates/style");
-            writerCss.write(computeStringTemplate(stCss, indexByModules));
-            writerCss.close();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-    }
-
-    private void createCustomAggregatorFiles(Map<String, MavenProject> indexByModules) {
-        for (File template : aggregateTemplate) {
-
-            try {
-
-
-                String fileName = computeStringTemplate(new StringTemplate(Files.getNameWithoutExtension(template.getName())), indexByModules);
-
-                final Writer writer = createWriterForFile(this.getOutputDirectory() + File.separator + fileName);
-                final StringTemplate st = new StringTemplate(Files.toString(template, Charset.defaultCharset()));
-                writer.write(computeStringTemplate(st, indexByModules));
-                writer.close();
-            } catch (final IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    String computeStringTemplate(StringTemplate st, Map<String, MavenProject> indexByModules) {
-
-        st.setAttribute("indexByModules", indexByModules);
-        st.setAttribute("modules", indexByModules.values());
-        st.setAttribute("mojo", this);
-        return st.toString();
-
-
-    }
-
-    public Writer createWriterForFile(final String filePath) throws IOException {
-
-        final int fileSepIndex = filePath.lastIndexOf(File.separatorChar);
-        if (fileSepIndex > 0) {
-
-            final File directoryFile = new File(filePath).getParentFile();
-            if (!directoryFile.exists()) {
-                directoryFile.mkdirs();
-            }
-        }
-        return new BufferedWriter(new FileWriter(filePath));
-
-    }
 
 }

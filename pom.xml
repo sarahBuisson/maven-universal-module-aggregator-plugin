@@ -4,9 +4,9 @@
 
 
     <groupId>com.github.sarahbuisson</groupId>
-    <version>0.3-SNAPSHOT</version>
+    <version>0.4-SNAPSHOT</version>
 
-    <artifactId>maven-universal-module-aggregator-plugin</artifactId>
+    <artifactId>universal-module-aggregator</artifactId>
     <packaging>maven-plugin</packaging>
     <name>maven-universal-module-aggregator-plugin</name>
     <description>module aggregator</description>
